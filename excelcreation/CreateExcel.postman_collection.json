@@ -1,0 +1,29 @@
+{
+	"info": {
+		"_postman_id": "abe3f144-a279-4c10-8926-e921592ff005",
+		"name": "CreateExcel",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Create Excel",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:4444/excel/create",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "4444",
+					"path": [
+						"excel",
+						"create"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
