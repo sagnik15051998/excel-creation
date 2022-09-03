@@ -1,15 +1,13 @@
 package com.excelcreation.service;
 
 import java.io.FileOutputStream;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.Statement;
+import java.net.URI;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
@@ -21,38 +19,35 @@ import org.apache.poi.ss.usermodel.VerticalAlignment;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.streaming.SXSSFSheet;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import com.excelcreation.dto.ResponseDto;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class ExcelService {
 	
-	@Value("${spring.datasource.url}")
-	private String db_url;
+	@Value("${employee-uri}")
+	private String employeeUrl;
 	
-	@Value("${spring.datasource.username}")
-	private String db_user;
-	
-	@Value("${spring.datasource.password}")
-	private String db_pass;
-	
+	@SuppressWarnings("unchecked")
 	public ResponseDto createExcel() throws Exception {
-		Connection conn = DriverManager.getConnection(db_url, db_user, db_pass);
-		Statement st = conn.createStatement();
-		String queryString = "select * from employees";
-		ResultSet rs = st.executeQuery(queryString);
-		
-		ResultSetMetaData metaResult = rs.getMetaData();
-		int colCount = metaResult.getColumnCount();
-		int rowCount = 0;
-		List<String> columnNames = new ArrayList<>();
-		for(int i=1;i<=colCount;i++) {
-			columnNames.add(metaResult.getColumnName(i));
-		}
-		
+
+		RestTemplate template = new RestTemplate();
 		String filepath = getFilePath();
+
+		String jsons = template.getForObject(new URI(employeeUrl), String.class);
+		JSONArray jsona = new JSONArray(jsons);
+		JSONObject jsono = jsona.getJSONObject(0);
+		
+		Map<String, String> map = new ObjectMapper().readValue(jsono.toString(), Map.class);
+		List<String> columnNames = map.keySet().stream().collect(Collectors.toList());
+		columnNames.sort(Comparator.comparing((String name) -> name.length()));
+		
 		FileOutputStream fos = new FileOutputStream(filepath);
 		Workbook wb = new SXSSFWorkbook();
 		Sheet sheet = (SXSSFSheet) wb.createSheet("Data");
@@ -62,18 +57,21 @@ public class ExcelService {
 		cs.setFont(f);
 		cs.setAlignment((short) HorizontalAlignment.CENTER.ordinal());
 		cs.setVerticalAlignment((short) VerticalAlignment.CENTER.ordinal());
+		
+		int rowCount=0, colCount = jsona.length();
 		Row headRow = sheet.createRow(++rowCount);
+		
 		fillHead(headRow, columnNames, cs);
-		while(rs.next()) {
+		
+		for(int i=0; i<jsona.length(); i++) {
 			Row dataRow = sheet.createRow(++rowCount);
-			fillData(dataRow, rs, colCount);
+			fillData(dataRow, jsona.getJSONObject(i), colCount, columnNames);
 		}
-		st.close();
-		conn.close();
+
 		wb.write(fos);
 		wb.close();
 		fos.close();
-		
+
 		return new ResponseDto("Successfully Created", filepath);
 	}
 	
@@ -94,10 +92,10 @@ public class ExcelService {
 		}
 	}
 	
-	private void fillData(Row row, ResultSet rs, int colcount) throws Exception {
+	private void fillData(Row row, JSONObject jo, int colcount, List<String> columnNames) throws Exception {
 		int i=1;
 		while(i<=colcount) {
-			Object val = rs.getObject(i);
+			Object val = jo.get(columnNames.get(i-1));
 			if(val instanceof Long || val instanceof Integer) {
 				row.createCell(i).setCellType(Cell.CELL_TYPE_NUMERIC);
 				row.getCell(i).setCellValue(Long.valueOf(String.valueOf(val)));
